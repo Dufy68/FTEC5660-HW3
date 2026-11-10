@@ -170,14 +170,115 @@ for each public company. Grading uses a private set of about 20 unseen
 companies with the same tools and the same answer key rules, but different
 names and wording, and scores your 3 points only.
 
-## Homework 3 solution:
-> to students: this is your report, see the homework description.
+## Homework 3 solution
 
 ### My 3 points and rules
-> for each point: why you chose it, your PASS rule in one or two sentences, and the evidence it uses. Quote Fisher where it helps.
+
+This implementation chooses points 4, 7 and 11. They cover customer-facing
+execution, employee relations and competitive durability. Each has a directly
+relevant interview source in the supplied tools. Fisher's questions below are
+reproduced from `FISHER_POINTS` in the starter code (Part One, Chapter 3).
+
+| Point | Why this point | PASS rule | Evidence |
+| --- | --- | --- | --- |
+| 4: sales organization | Sales quality determines whether a company can turn product potential into customer relationships. Fisher asks whether the company has an “above-average sales organization.” | PASS when the interview describes knowledgeable, proactive, consultative salespeople who understand customers and provide useful advice or support. FAIL for order-taking, price lists without advice, poor product knowledge or weak follow-up. | `interview(customer, sales_team)` |
+| 7: labour and personnel relations | Employee treatment affects retention and the ability to execute consistently. Fisher asks about “outstanding labor and personnel relations.” | PASS when the interview describes fair treatment, constructive communication, training, safety or retention consistent with strong personnel relations. FAIL for intimidation, unsafe or unfair conditions, ignored concerns, excessive turnover or destructive labour relations. | `interview(current_employee, working_conditions)` |
+| 11: competitive advantage | A profitable product is more valuable when rivals cannot easily replicate its advantage. | PASS for a concrete defensible advantage, such as proprietary technology, qualification barriers, embedded workflows, switching costs, exclusive access, network effects or difficult-to-copy expertise. FAIL for interchangeable products, easy copying, no durable differentiation or competition mainly on price. | `interview(competitor, competitive_edge)` |
+
+The rules assess the full interview, including contrary evidence. They do not
+require every listed positive example, and they do not use isolated sentiment
+words. The homework states that knowledgeable interviewees agree, so one
+informed source per point is sufficient for this dataset. This would be a weak
+basis for an actual investment decision, where independent corroboration and
+financial analysis would also be needed.
 
 ### Design
-> a visualization of your agent design and one paragraph describing it.
+
+```mermaid
+flowchart TD
+    A[Company and supplied LangChain tools] --> B[Fixed interview plan]
+    B --> C[Point 4: customer / sales_team]
+    B --> D[Point 7: current_employee / working_conditions]
+    B --> E[Point 11: competitor / competitive_edge]
+    C --> F[Collected interview evidence]
+    D --> F
+    E --> F
+    F --> G[LangChain prompt and deepseek-v4-flash in JSON mode]
+    G --> H{Validate coverage, verdicts and exact quotes}
+    H -->|Valid| I[Three verdicts and evidence-based summary]
+    H -->|Invalid or API error| J{Attempts remaining?}
+    J -->|Yes: reuse evidence| G
+    J -->|No| K[Diagnostic entry with missing verdicts]
+    I --> L[Unchanged runner writes results.csv]
+    K --> L
+```
+
+The agent uses a fixed plan to route each point to a knowledgeable interviewee,
+then calls the three interview tools once per company. A LangChain prompt/model/
+JSON-parser chain applies the written rules using only those responses. Python
+checks that the output covers each selected point exactly once, contains valid
+PASS/FAIL verdicts, includes reasons and quotes the correct interview verbatim.
+A failed response triggers up to two further model attempts without repeating
+interviews. The summary is assembled from the validated verdicts, reasons and
+quotes. Up to four companies run concurrently; individual company failures
+produce diagnostic entries so the runner can still write its CSV. The model
+has temperature zero, a 60-second request timeout, no implicit provider retries,
+and a 90-second outer timeout per attempt. Interview text is explicitly treated
+as evidence rather than instructions. Quote validation confirms provenance;
+it does not independently prove that the model's interpretation is correct.
+
+Only the supplied `interview` tool is needed for these chosen points. Company
+database files, interview files and public answers are never read by the
+student agent. No management claims or web search enter its company analysis.
+The supplied tools, runner and scoring code are unchanged.
 
 ### Results
-> your point score on `public_test`, the companies where your verdicts disagree with the public answers, and why.
+
+The first live public-test run on 10 November 2026 used `deepseek-v4-flash` and
+returned all 60 requested verdicts correctly across 20 companies:
+
+| Measure | Result |
+| --- | --- |
+| Point accuracy | 60 / 60 (100%) |
+| Balanced point score | 100% |
+| Correct PASS verdicts | 42 / 42 |
+| Correct FAIL verdicts | 18 / 18 |
+| Interviews per company | 3 |
+| Disagreements with public answers | None |
+
+A second live run from a fresh checkout, using the same installed Python
+environment, also scored 60/60 with 100% balanced accuracy. The complete
+per-company outputs are saved in `evaluation/public_run1.csv` and
+`evaluation/public_run2.csv`.
+No company-specific exceptions or public-label lookups were added. Public
+accuracy does not establish performance on the unseen grading set, and
+model outputs can vary even at temperature zero.
+
+Four offline checks cover wrong-source quotes and duplicate points, retries
+without spending additional interviews, isolation of a failed company, and
+exhaustion of API retries. Run them from the repository root with:
+
+```bash
+.venv/bin/python -m unittest discover -s tests -v
+```
+
+To reproduce the live evaluation, use Python 3.10 or newer and follow the setup
+above, then run:
+
+```bash
+python hw3.py --data-folder public_test
+```
+
+Use the virtual environment's Python: some systems still map `python3` to an
+older version. Keep `DEEPSEEK_API_KEY` in the ignored `.env` file or the process
+environment. Missing credentials or exhausted retries produce missing verdicts
+and diagnostic summaries, which count as incorrect; they are not replaced by
+invented PASS/FAIL decisions.
+
+Implementation references: [LangChain DeepSeek JSON-mode interface](https://reference.langchain.com/python/langchain-deepseek/chat_models/ChatDeepSeek/with_structured_output)
+and [DeepSeek JSON output guide](https://api-docs.deepseek.com/guides/json_mode/).
+
+## Task 2: Reflection
+
+See [the reflection on AI sycophancy and AI psychosis](reflection.md), focusing
+on evidence and independent judgment in FinTech agents.
